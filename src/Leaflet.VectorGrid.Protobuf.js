@@ -70,6 +70,7 @@ L.VectorGrid.Protobuf = L.VectorGrid.extend({
 		// Inherits options from geojson-vt!
 // 		this._slicer = geojsonvt(geojson, options);
 		this._url = url;
+		this._tileZoom = 0
 		this._abortController = new AbortController()
 		L.VectorGrid.prototype.initialize.call(this, options);
 	},
@@ -103,12 +104,16 @@ L.VectorGrid.Protobuf = L.VectorGrid.extend({
 		return currentZoom && currentBounds;
 
 	},
-
-	_abortLoading: function () {
-		this._abortController.abort()
-		this._abortController = new AbortController()
+	_setView: function (center, zoom, noPrune, noUpdate) {
+		if (zoom !== this._tileZoom) {
+			this._tileZoom = zoom
+			this._abortController.abort()
+			this._abortController = new AbortController()
+		}
+    L.VectorGrid.prototype._setView.call(this, center, zoom, noPrune, noUpdate)
 	},
 	_getVectorTilePromise: function(coords, tileBounds) {
+		this._tileZoom = coords.z
 		var data = {
 			s: this._getSubdomain(coords),
 			x: coords.x,
