@@ -2,7 +2,6 @@
 // Aux file to bundle everything together, including the optional dependencies
 // for protobuf tiles
 
-import {} from 'whatwg-fetch'
 
 import {} from 'pbf';
 import {VectorTile} from 'vector-tile';
