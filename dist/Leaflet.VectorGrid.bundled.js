@@ -2536,7 +2536,6 @@ L.VectorGrid.Protobuf = L.VectorGrid.extend({
 // 		this._slicer = geojsonvt(geojson, options);
 		this._url = url;
 		this._tileZoom = 0;
-		this._id = 0;
 		this._abortController = new AbortController();
 		L.VectorGrid.prototype.initialize.call(this, options);
 	},
@@ -2573,12 +2572,10 @@ L.VectorGrid.Protobuf = L.VectorGrid.extend({
 	_setView: function (center, zoom, noPrune, noUpdate) {
 		if (zoom !== this._tileZoom) {
 			this._tileZoom = zoom;
-			this._id++;
 			this._abortController.abort();
 			this._abortController = new AbortController();
 		}
     L.VectorGrid.prototype._setView.call(this, center, zoom, noPrune, noUpdate);
-		console.log('setting view');
 	},
 	_getVectorTilePromise: function(coords, tileBounds) {
 		this._tileZoom = coords.z;
@@ -2604,7 +2601,6 @@ L.VectorGrid.Protobuf = L.VectorGrid.extend({
 		var tileUrl = L.Util.template(this._url, L.extend(data, this.options));
 
 		const controller = this._abortController;
-		console.log(this._id, coords.z);
 		return fetch$1.fetch(tileUrl, Object.assign({signal: controller.signal}, this.options.fetchOptions)).then(function(response){
 
 			if (!response.ok || !this._isCurrentTile(coords)) {
