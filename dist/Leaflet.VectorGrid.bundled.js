@@ -1531,7 +1531,7 @@ L.VectorGrid = L.GridLayer.extend({
 			renderer._features = {};
 		}
 
-		vectorTilePromise.then( function renderTile(vectorTile) {
+		vectorTilePromise.then(function renderTile(vectorTile) {
 
 			if (vectorTile.layers && vectorTile.layers.length !== 0) {
 
@@ -1603,7 +1603,15 @@ L.VectorGrid = L.GridLayer.extend({
 	
 			L.Util.requestAnimFrame(done.bind(coords, null, null));
 
-		}.bind(this));
+		}.bind(this), function (err) {
+			var errorCode = err && err.code;
+			var abortErrorCode = window.DOMException && window.DOMException.ABORT_ERR;
+			if (!(errorCode && abortErrorCode && (errorCode === abortErrorCode))) {
+        console.error(err);
+			} else {
+				// Abort happens all the time when we change zoom. No point in logging
+			}
+		});
 
 		return renderer.getContainer();
 	},
@@ -2600,7 +2608,7 @@ L.VectorGrid.Protobuf = L.VectorGrid.extend({
 
 		var tileUrl = L.Util.template(this._url, L.extend(data, this.options));
 
-		const controller = this._abortController;
+		var controller = this._abortController;
 		return fetch$1.fetch(tileUrl, Object.assign({signal: controller.signal}, this.options.fetchOptions)).then(function(response){
 
 			if (!response.ok || !this._isCurrentTile(coords)) {
@@ -2802,17 +2810,17 @@ L.Canvas.Tile = L.Canvas.extend({
 	},
 
 	_onClick: function (e) {
-		var point = this._map.mouseEventToLayerPoint(e).subtract(this.getOffset()), layer, clickedLayer;
+		var point = this._map.mouseEventToLayerPoint(e).subtract(this.getOffset()), clickedLayers = [], layer;
 
 		for (var id in this._layers) {
 			layer = this._layers[id];
 			if (layer.options.interactive && layer._containsPoint(point) && !this._map._draggableMoved(layer)) {
-				clickedLayer = layer;
+				L.DomEvent._fakeStop(e);
+				clickedLayers.push(layer);
 			}
 		}
-		if (clickedLayer)  {
-			L.DomEvent.fakeStop(e);
-			this._fireEvent([clickedLayer], e);
+		if (clickedLayers.length)  {
+			this._fireEvent(clickedLayers, e);
 		}
 	},
 
