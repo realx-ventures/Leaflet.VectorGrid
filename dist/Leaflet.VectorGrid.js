@@ -325,6 +325,12 @@ L.VectorGrid = L.GridLayer.extend({
 		// A function that, given a vector feature, returns an unique identifier for it, e.g.
 		// `function(feat) { return feat.properties.uniqueIdField; }`.
 		// Must be defined for `setFeatureStyle` to work.
+
+		// 🍂option filter: Function = undefined
+		// A Function that will be used to decide whether to include a feature or not
+		// depending on feature properties and zoom, e.g.
+		// `function(properties, zoom) { return true; }`.
+		// The default is to include all features. Similar to L.GeoJSON filter option.
 	},
 
 	initialize: function(options) {
@@ -379,6 +385,11 @@ L.VectorGrid = L.GridLayer.extend({
 						var feat = layer.features[i];
 						var id;
 	
+						if (this.options.filter instanceof Function &&
+							!this.options.filter(feat.properties, coords.z)) {
+							continue;
+						}
+
 						var styleOptions = layerStyle;
 						if (storeFeatures) {
 							id = this.options.getFeatureId(feat);
@@ -417,10 +428,16 @@ L.VectorGrid = L.GridLayer.extend({
 						}
 	
 						if (storeFeatures) {
-							renderer._features[id] = {
+							// multiple features may share the same id, add them
+							// to an array of features
+							if (!renderer._features[id]) {
+								renderer._features[id] = [];
+							}
+
+							renderer._features[id].push({
 								layerName: layerName,
 								feature: featureLayer
-							};
+							});
 						}
 					}
 	
@@ -455,17 +472,18 @@ L.VectorGrid = L.GridLayer.extend({
 
 		for (var tileKey in this._vectorTiles) {
 			var tile = this._vectorTiles[tileKey];
-			var features = tile._features;
-			var data = features[id];
-			if (data) {
-				var feat = data.feature;
+			var features = tile._features[id];
+			if (features) {
+				for (var i=0; i<features.length; i++) {
+                    var feature = features[i];
 
-				var styleOptions = layerStyle;
-				if (layerStyle[data.layerName]) {
-					styleOptions = layerStyle[data.layerName];
-				}
+                    var styleOptions = layerStyle;
+                    if (layerStyle[feature.layerName]) {
+                        styleOptions = layerStyle[feature.layerName];
+                    }
 
-				this._updateStyles(feat, tile, styleOptions);
+                    this._updateStyles(feature.feature, tile, styleOptions);
+                }
 			}
 		}
 		return this;
@@ -478,15 +496,25 @@ L.VectorGrid = L.GridLayer.extend({
 
 		for (var tileKey in this._vectorTiles) {
 			var tile = this._vectorTiles[tileKey];
-			var features = tile._features;
-			var data = features[id];
-			if (data) {
-				var feat = data.feature;
-				var styleOptions = this.options.vectorTileLayerStyles[ data.layerName ] ||
-				L.Path.prototype.options;
-				this._updateStyles(feat, tile, styleOptions);
+			var features = tile._features[id];
+			if (features) {
+				for (var i=0; i<features.length; i++) {
+					var feature = features[i];
+
+                    var styleOptions = this.options.vectorTileLayerStyles[feature.layerName] ||
+                        L.Path.prototype.options;
+                    this._updateStyles(feature.feature, tile, styleOptions);
+                }
 			}
 		}
+		return this;
+	},
+
+	// 🍂method setFilter(filterFn: Function): this
+	// Sets filter function to filter displayed features.
+	setFilter: function (filterFn) {
+		this.options.filter = filterFn;
+		this.redraw();
 		return this;
 	},
 
@@ -517,6 +545,8 @@ L.VectorGrid = L.GridLayer.extend({
 		switch (feat.type) {
 		case 1:
 			layer = new PointSymbolizer(feat, pxPerExtent);
+			//prevent leaflet from treating these canvas points as real markers
+			layer.getLatLng = null;
 			break;
 		case 2:
 			layer = new LineSymbolizer(feat, pxPerExtent);
@@ -550,7 +580,7 @@ L.vectorGrid = function (options) {
 
 var read = function (buffer, offset, isLE, mLen, nBytes) {
   var e, m;
-  var eLen = nBytes * 8 - mLen - 1;
+  var eLen = (nBytes * 8) - mLen - 1;
   var eMax = (1 << eLen) - 1;
   var eBias = eMax >> 1;
   var nBits = -7;
@@ -563,12 +593,12 @@ var read = function (buffer, offset, isLE, mLen, nBytes) {
   e = s & ((1 << (-nBits)) - 1);
   s >>= (-nBits);
   nBits += eLen;
-  for (; nBits > 0; e = e * 256 + buffer[offset + i], i += d, nBits -= 8) {}
+  for (; nBits > 0; e = (e * 256) + buffer[offset + i], i += d, nBits -= 8) {}
 
   m = e & ((1 << (-nBits)) - 1);
   e >>= (-nBits);
   nBits += mLen;
-  for (; nBits > 0; m = m * 256 + buffer[offset + i], i += d, nBits -= 8) {}
+  for (; nBits > 0; m = (m * 256) + buffer[offset + i], i += d, nBits -= 8) {}
 
   if (e === 0) {
     e = 1 - eBias;
@@ -583,7 +613,7 @@ var read = function (buffer, offset, isLE, mLen, nBytes) {
 
 var write = function (buffer, value, offset, isLE, mLen, nBytes) {
   var e, m, c;
-  var eLen = nBytes * 8 - mLen - 1;
+  var eLen = (nBytes * 8) - mLen - 1;
   var eMax = (1 << eLen) - 1;
   var eBias = eMax >> 1;
   var rt = (mLen === 23 ? Math.pow(2, -24) - Math.pow(2, -77) : 0);
@@ -616,7 +646,7 @@ var write = function (buffer, value, offset, isLE, mLen, nBytes) {
       m = 0;
       e = eMax;
     } else if (e + eBias >= 1) {
-      m = (value * c - 1) * Math.pow(2, mLen);
+      m = ((value * c) - 1) * Math.pow(2, mLen);
       e = e + eBias;
     } else {
       m = value * Math.pow(2, eBias - 1) * Math.pow(2, mLen);
@@ -656,6 +686,11 @@ Pbf.Fixed32 = 5; // 32-bit: float, fixed32, sfixed32
 
 var SHIFT_LEFT_32 = (1 << 16) * (1 << 16);
 var SHIFT_RIGHT_32 = 1 / SHIFT_LEFT_32;
+
+// Threshold chosen based on both benchmarking and knowledge about browser string
+// data structures (which currently switch structure types at 12 bytes or more)
+var TEXT_DECODER_MIN_LENGTH = 12;
+var utf8TextDecoder = typeof TextDecoder === 'undefined' ? null : new TextDecoder('utf8');
 
 Pbf.prototype = {
 
@@ -752,10 +787,16 @@ Pbf.prototype = {
     },
 
     readString: function() {
-        var end = this.readVarint() + this.pos,
-            str = readUtf8(this.buf, this.pos, end);
+        var end = this.readVarint() + this.pos;
+        var pos = this.pos;
         this.pos = end;
-        return str;
+
+        if (end - pos >= TEXT_DECODER_MIN_LENGTH && utf8TextDecoder) {
+            // longer strings are fast with the built-in browser TextDecoder API
+            return readUtf8TextDecoder(this.buf, pos, end);
+        }
+        // short strings are fast with our custom implementation
+        return readUtf8(this.buf, pos, end);
     },
 
     readBytes: function() {
@@ -770,6 +811,7 @@ Pbf.prototype = {
     readPackedVarint: function(arr, isSigned) {
         var this$1 = this;
 
+        if (this.type !== Pbf.Bytes) { return arr.push(this.readVarint(isSigned)); }
         var end = readPackedEnd(this);
         arr = arr || [];
         while (this.pos < end) { arr.push(this$1.readVarint(isSigned)); }
@@ -778,6 +820,7 @@ Pbf.prototype = {
     readPackedSVarint: function(arr) {
         var this$1 = this;
 
+        if (this.type !== Pbf.Bytes) { return arr.push(this.readSVarint()); }
         var end = readPackedEnd(this);
         arr = arr || [];
         while (this.pos < end) { arr.push(this$1.readSVarint()); }
@@ -786,6 +829,7 @@ Pbf.prototype = {
     readPackedBoolean: function(arr) {
         var this$1 = this;
 
+        if (this.type !== Pbf.Bytes) { return arr.push(this.readBoolean()); }
         var end = readPackedEnd(this);
         arr = arr || [];
         while (this.pos < end) { arr.push(this$1.readBoolean()); }
@@ -794,6 +838,7 @@ Pbf.prototype = {
     readPackedFloat: function(arr) {
         var this$1 = this;
 
+        if (this.type !== Pbf.Bytes) { return arr.push(this.readFloat()); }
         var end = readPackedEnd(this);
         arr = arr || [];
         while (this.pos < end) { arr.push(this$1.readFloat()); }
@@ -802,6 +847,7 @@ Pbf.prototype = {
     readPackedDouble: function(arr) {
         var this$1 = this;
 
+        if (this.type !== Pbf.Bytes) { return arr.push(this.readDouble()); }
         var end = readPackedEnd(this);
         arr = arr || [];
         while (this.pos < end) { arr.push(this$1.readDouble()); }
@@ -810,6 +856,7 @@ Pbf.prototype = {
     readPackedFixed32: function(arr) {
         var this$1 = this;
 
+        if (this.type !== Pbf.Bytes) { return arr.push(this.readFixed32()); }
         var end = readPackedEnd(this);
         arr = arr || [];
         while (this.pos < end) { arr.push(this$1.readFixed32()); }
@@ -818,6 +865,7 @@ Pbf.prototype = {
     readPackedSFixed32: function(arr) {
         var this$1 = this;
 
+        if (this.type !== Pbf.Bytes) { return arr.push(this.readSFixed32()); }
         var end = readPackedEnd(this);
         arr = arr || [];
         while (this.pos < end) { arr.push(this$1.readSFixed32()); }
@@ -826,6 +874,7 @@ Pbf.prototype = {
     readPackedFixed64: function(arr) {
         var this$1 = this;
 
+        if (this.type !== Pbf.Bytes) { return arr.push(this.readFixed64()); }
         var end = readPackedEnd(this);
         arr = arr || [];
         while (this.pos < end) { arr.push(this$1.readFixed64()); }
@@ -834,6 +883,7 @@ Pbf.prototype = {
     readPackedSFixed64: function(arr) {
         var this$1 = this;
 
+        if (this.type !== Pbf.Bytes) { return arr.push(this.readSFixed64()); }
         var end = readPackedEnd(this);
         arr = arr || [];
         while (this.pos < end) { arr.push(this$1.readSFixed64()); }
@@ -985,15 +1035,15 @@ Pbf.prototype = {
         this.writeRawMessage(fn, obj);
     },
 
-    writePackedVarint:   function(tag, arr) { this.writeMessage(tag, writePackedVarint, arr);   },
-    writePackedSVarint:  function(tag, arr) { this.writeMessage(tag, writePackedSVarint, arr);  },
-    writePackedBoolean:  function(tag, arr) { this.writeMessage(tag, writePackedBoolean, arr);  },
-    writePackedFloat:    function(tag, arr) { this.writeMessage(tag, writePackedFloat, arr);    },
-    writePackedDouble:   function(tag, arr) { this.writeMessage(tag, writePackedDouble, arr);   },
-    writePackedFixed32:  function(tag, arr) { this.writeMessage(tag, writePackedFixed32, arr);  },
-    writePackedSFixed32: function(tag, arr) { this.writeMessage(tag, writePackedSFixed32, arr); },
-    writePackedFixed64:  function(tag, arr) { this.writeMessage(tag, writePackedFixed64, arr);  },
-    writePackedSFixed64: function(tag, arr) { this.writeMessage(tag, writePackedSFixed64, arr); },
+    writePackedVarint:   function(tag, arr) { if (arr.length) { this.writeMessage(tag, writePackedVarint, arr); }   },
+    writePackedSVarint:  function(tag, arr) { if (arr.length) { this.writeMessage(tag, writePackedSVarint, arr); }  },
+    writePackedBoolean:  function(tag, arr) { if (arr.length) { this.writeMessage(tag, writePackedBoolean, arr); }  },
+    writePackedFloat:    function(tag, arr) { if (arr.length) { this.writeMessage(tag, writePackedFloat, arr); }    },
+    writePackedDouble:   function(tag, arr) { if (arr.length) { this.writeMessage(tag, writePackedDouble, arr); }   },
+    writePackedFixed32:  function(tag, arr) { if (arr.length) { this.writeMessage(tag, writePackedFixed32, arr); }  },
+    writePackedSFixed32: function(tag, arr) { if (arr.length) { this.writeMessage(tag, writePackedSFixed32, arr); } },
+    writePackedFixed64:  function(tag, arr) { if (arr.length) { this.writeMessage(tag, writePackedFixed64, arr); }  },
+    writePackedSFixed64: function(tag, arr) { if (arr.length) { this.writeMessage(tag, writePackedSFixed64, arr); } },
 
     writeBytesField: function(tag, buffer) {
         this.writeTag(tag, Pbf.Bytes);
@@ -1118,7 +1168,7 @@ function makeRoomForExtraLength(startPos, len, pbf) {
     var extraLen =
         len <= 0x3fff ? 1 :
         len <= 0x1fffff ? 2 :
-        len <= 0xfffffff ? 3 : Math.ceil(Math.log(len) / (Math.LN2 * 7));
+        len <= 0xfffffff ? 3 : Math.floor(Math.log(len) / (Math.LN2 * 7));
 
     // if 1 byte isn't enough for encoding message length, shift the data to the right
     pbf.realloc(extraLen);
@@ -1224,6 +1274,10 @@ function readUtf8(buf, pos, end) {
     return str;
 }
 
+function readUtf8TextDecoder(buf, pos, end) {
+    return utf8TextDecoder.decode(buf.subarray(pos, end));
+}
+
 function writeUtf8(buf, str, pos) {
     for (var i = 0, c, lead; i < str.length; i++) {
         c = str.charCodeAt(i); // code point
@@ -1279,56 +1333,205 @@ function writeUtf8(buf, str, pos) {
 
 var index$5 = Point$1;
 
+/**
+ * A standalone point geometry with useful accessor, comparison, and
+ * modification methods.
+ *
+ * @class Point
+ * @param {Number} x the x-coordinate. this could be longitude or screen
+ * pixels, or any other sort of unit.
+ * @param {Number} y the y-coordinate. this could be latitude or screen
+ * pixels, or any other sort of unit.
+ * @example
+ * var point = new Point(-77, 38);
+ */
 function Point$1(x, y) {
     this.x = x;
     this.y = y;
 }
 
 Point$1.prototype = {
+
+    /**
+     * Clone this point, returning a new point that can be modified
+     * without affecting the old one.
+     * @return {Point} the clone
+     */
     clone: function() { return new Point$1(this.x, this.y); },
 
-    add:     function(p) { return this.clone()._add(p);     },
-    sub:     function(p) { return this.clone()._sub(p);     },
-    mult:    function(k) { return this.clone()._mult(k);    },
-    div:     function(k) { return this.clone()._div(k);     },
-    rotate:  function(a) { return this.clone()._rotate(a);  },
+    /**
+     * Add this point's x & y coordinates to another point,
+     * yielding a new point.
+     * @param {Point} p the other point
+     * @return {Point} output point
+     */
+    add:     function(p) { return this.clone()._add(p); },
+
+    /**
+     * Subtract this point's x & y coordinates to from point,
+     * yielding a new point.
+     * @param {Point} p the other point
+     * @return {Point} output point
+     */
+    sub:     function(p) { return this.clone()._sub(p); },
+
+    /**
+     * Multiply this point's x & y coordinates by point,
+     * yielding a new point.
+     * @param {Point} p the other point
+     * @return {Point} output point
+     */
+    multByPoint:    function(p) { return this.clone()._multByPoint(p); },
+
+    /**
+     * Divide this point's x & y coordinates by point,
+     * yielding a new point.
+     * @param {Point} p the other point
+     * @return {Point} output point
+     */
+    divByPoint:     function(p) { return this.clone()._divByPoint(p); },
+
+    /**
+     * Multiply this point's x & y coordinates by a factor,
+     * yielding a new point.
+     * @param {Point} k factor
+     * @return {Point} output point
+     */
+    mult:    function(k) { return this.clone()._mult(k); },
+
+    /**
+     * Divide this point's x & y coordinates by a factor,
+     * yielding a new point.
+     * @param {Point} k factor
+     * @return {Point} output point
+     */
+    div:     function(k) { return this.clone()._div(k); },
+
+    /**
+     * Rotate this point around the 0, 0 origin by an angle a,
+     * given in radians
+     * @param {Number} a angle to rotate around, in radians
+     * @return {Point} output point
+     */
+    rotate:  function(a) { return this.clone()._rotate(a); },
+
+    /**
+     * Rotate this point around p point by an angle a,
+     * given in radians
+     * @param {Number} a angle to rotate around, in radians
+     * @param {Point} p Point to rotate around
+     * @return {Point} output point
+     */
+    rotateAround:  function(a,p) { return this.clone()._rotateAround(a,p); },
+
+    /**
+     * Multiply this point by a 4x1 transformation matrix
+     * @param {Array<Number>} m transformation matrix
+     * @return {Point} output point
+     */
     matMult: function(m) { return this.clone()._matMult(m); },
+
+    /**
+     * Calculate this point but as a unit vector from 0, 0, meaning
+     * that the distance from the resulting point to the 0, 0
+     * coordinate will be equal to 1 and the angle from the resulting
+     * point to the 0, 0 coordinate will be the same as before.
+     * @return {Point} unit vector point
+     */
     unit:    function() { return this.clone()._unit(); },
+
+    /**
+     * Compute a perpendicular point, where the new y coordinate
+     * is the old x coordinate and the new x coordinate is the old y
+     * coordinate multiplied by -1
+     * @return {Point} perpendicular point
+     */
     perp:    function() { return this.clone()._perp(); },
+
+    /**
+     * Return a version of this point with the x & y coordinates
+     * rounded to integers.
+     * @return {Point} rounded point
+     */
     round:   function() { return this.clone()._round(); },
 
+    /**
+     * Return the magitude of this point: this is the Euclidean
+     * distance from the 0, 0 coordinate to this point's x and y
+     * coordinates.
+     * @return {Number} magnitude
+     */
     mag: function() {
         return Math.sqrt(this.x * this.x + this.y * this.y);
     },
 
-    equals: function(p) {
-        return this.x === p.x &&
-               this.y === p.y;
+    /**
+     * Judge whether this point is equal to another point, returning
+     * true or false.
+     * @param {Point} other the other point
+     * @return {boolean} whether the points are equal
+     */
+    equals: function(other) {
+        return this.x === other.x &&
+               this.y === other.y;
     },
 
+    /**
+     * Calculate the distance from this point to another point
+     * @param {Point} p the other point
+     * @return {Number} distance
+     */
     dist: function(p) {
         return Math.sqrt(this.distSqr(p));
     },
 
+    /**
+     * Calculate the distance from this point to another point,
+     * without the square root step. Useful if you're comparing
+     * relative distances.
+     * @param {Point} p the other point
+     * @return {Number} distance
+     */
     distSqr: function(p) {
         var dx = p.x - this.x,
             dy = p.y - this.y;
         return dx * dx + dy * dy;
     },
 
+    /**
+     * Get the angle from the 0, 0 coordinate to this point, in radians
+     * coordinates.
+     * @return {Number} angle
+     */
     angle: function() {
         return Math.atan2(this.y, this.x);
     },
 
+    /**
+     * Get the angle from this point to another point, in radians
+     * @param {Point} b the other point
+     * @return {Number} angle
+     */
     angleTo: function(b) {
         return Math.atan2(this.y - b.y, this.x - b.x);
     },
 
+    /**
+     * Get the angle between this point and another point, in radians
+     * @param {Point} b the other point
+     * @return {Number} angle
+     */
     angleWith: function(b) {
         return this.angleWithSep(b.x, b.y);
     },
 
-    // Find the angle of the two vectors, solving the formula for the cross product a x b = |a||b|sin(θ) for θ.
+    /*
+     * Find the angle of the two vectors, solving the formula for
+     * the cross product a x b = |a||b|sin(θ) for θ.
+     * @param {Number} x the x-coordinate
+     * @param {Number} y the y-coordinate
+     * @return {Number} the angle in radians
+     */
     angleWithSep: function(x, y) {
         return Math.atan2(
             this.x * y - this.y * x,
@@ -1367,6 +1570,18 @@ Point$1.prototype = {
         return this;
     },
 
+    _multByPoint: function(p) {
+        this.x *= p.x;
+        this.y *= p.y;
+        return this;
+    },
+
+    _divByPoint: function(p) {
+        this.x /= p.x;
+        this.y /= p.y;
+        return this;
+    },
+
     _unit: function() {
         this._div(this.mag());
         return this;
@@ -1389,6 +1604,16 @@ Point$1.prototype = {
         return this;
     },
 
+    _rotateAround: function(angle, p) {
+        var cos = Math.cos(angle),
+            sin = Math.sin(angle),
+            x = p.x + cos * (this.x - p.x) - sin * (this.y - p.y),
+            y = p.y + sin * (this.x - p.x) + cos * (this.y - p.y);
+        this.x = x;
+        this.y = y;
+        return this;
+    },
+
     _round: function() {
         this.x = Math.round(this.x);
         this.y = Math.round(this.y);
@@ -1396,7 +1621,17 @@ Point$1.prototype = {
     }
 };
 
-// constructs Point from an array if necessary
+/**
+ * Construct a point from an array if necessary, otherwise if the input
+ * is already a Point, or an unknown type, return it unchanged
+ * @param {Array<Number>|Point|*} a any kind of input value
+ * @return {Point} constructed point, or passed-through value.
+ * @example
+ * // this
+ * var point = Point.convert([0, 1]);
+ * // is equivalent to
+ * var point = new Point(0, 1);
+ */
 Point$1.convert = function (a) {
     if (a instanceof Point$1) {
         return a;
@@ -1458,7 +1693,7 @@ VectorTileFeature$2.prototype.loadGeometry = function() {
         line;
 
     while (pbf.pos < end) {
-        if (!length) {
+        if (length <= 0) {
             var cmdLen = pbf.readVarint();
             cmd = cmdLen & 0x7;
             length = cmdLen >> 3;
@@ -1509,7 +1744,7 @@ VectorTileFeature$2.prototype.bbox = function() {
         y2 = -Infinity;
 
     while (pbf.pos < end) {
-        if (!length) {
+        if (length <= 0) {
             var cmdLen = pbf.readVarint();
             cmd = cmdLen & 0x7;
             length = cmdLen >> 3;
@@ -1716,375 +1951,345 @@ function readTile(tag, layers, pbf) {
 
 var VectorTile = vectortile;
 
-var commonjsGlobal = typeof window !== 'undefined' ? window : typeof global !== 'undefined' ? global : typeof self !== 'undefined' ? self : {};
-
-
-
-
-
-function createCommonjsModule(fn, module) {
-	return module = { exports: {} }, fn(module, module.exports), module.exports;
-}
-
-var fetch$1 = createCommonjsModule(function (module) {
-(function(root, factory) {
-  /* jshint strict:false */
-  /* globals define, module */
-  if (typeof define === 'function' && define.amd) {
-    define([], function() { return factory({}, root) });
-  } else if (typeof module === 'object' && module.exports) {
-    factory(module.exports, root);
-  } else {
-    root.WHATWGFetch = factory({}, root);
-  }
-})(typeof self !== 'undefined' ? self : commonjsGlobal, function(exports, self) {
-  'use strict';
-
-  var support = {
-    searchParams: 'URLSearchParams' in self,
-    iterable: 'Symbol' in self && 'iterator' in Symbol,
-    blob: 'FileReader' in self && 'Blob' in self && (function() {
+var support = {
+  searchParams: 'URLSearchParams' in self,
+  iterable: 'Symbol' in self && 'iterator' in Symbol,
+  blob:
+    'FileReader' in self &&
+    'Blob' in self &&
+    (function() {
       try {
         new Blob();
         return true
-      } catch(e) {
+      } catch (e) {
         return false
       }
     })(),
-    formData: 'FormData' in self,
-    arrayBuffer: 'ArrayBuffer' in self
-  };
+  formData: 'FormData' in self,
+  arrayBuffer: 'ArrayBuffer' in self
+};
 
-  if (support.arrayBuffer) {
-    var viewClasses = [
-      '[object Int8Array]',
-      '[object Uint8Array]',
-      '[object Uint8ClampedArray]',
-      '[object Int16Array]',
-      '[object Uint16Array]',
-      '[object Int32Array]',
-      '[object Uint32Array]',
-      '[object Float32Array]',
-      '[object Float64Array]'
-    ];
+function isDataView(obj) {
+  return obj && DataView.prototype.isPrototypeOf(obj)
+}
 
-    var isDataView = function(obj) {
-      return obj && DataView.prototype.isPrototypeOf(obj)
-    };
-
-    var isArrayBufferView = ArrayBuffer.isView || function(obj) {
-      return obj && viewClasses.indexOf(Object.prototype.toString.call(obj)) > -1
-    };
+function normalizeName(name) {
+  if (typeof name !== 'string') {
+    name = String(name);
   }
-
-  function normalizeName(name) {
-    if (typeof name !== 'string') {
-      name = String(name);
-    }
-    if (/[^a-z0-9\-#$%&'*+.\^_`|~]/i.test(name)) {
-      throw new TypeError('Invalid character in header field name')
-    }
-    return name.toLowerCase()
+  if (/[^a-z0-9\-#$%&'*+.^_`|~]/i.test(name)) {
+    throw new TypeError('Invalid character in header field name')
   }
+  return name.toLowerCase()
+}
 
-  function normalizeValue(value) {
-    if (typeof value !== 'string') {
-      value = String(value);
-    }
-    return value
+function normalizeValue(value) {
+  if (typeof value !== 'string') {
+    value = String(value);
   }
+  return value
+}
 
-  // Build a destructive iterator for the value list
-  function iteratorFor(items) {
-    var iterator = {
-      next: function() {
-        var value = items.shift();
-        return {done: value === undefined, value: value}
-      }
-    };
-
-    if (support.iterable) {
-      iterator[Symbol.iterator] = function() {
-        return iterator
-      };
+// Build a destructive iterator for the value list
+function iteratorFor(items) {
+  var iterator = {
+    next: function() {
+      var value = items.shift();
+      return {done: value === undefined, value: value}
     }
-
-    return iterator
-  }
-
-  function Headers(headers) {
-    this.map = {};
-
-    if (headers instanceof Headers) {
-      headers.forEach(function(value, name) {
-        this.append(name, value);
-      }, this);
-    } else if (Array.isArray(headers)) {
-      headers.forEach(function(header) {
-        this.append(header[0], header[1]);
-      }, this);
-    } else if (headers) {
-      Object.getOwnPropertyNames(headers).forEach(function(name) {
-        this.append(name, headers[name]);
-      }, this);
-    }
-  }
-
-  Headers.prototype.append = function(name, value) {
-    name = normalizeName(name);
-    value = normalizeValue(value);
-    var oldValue = this.map[name];
-    this.map[name] = oldValue ? oldValue+','+value : value;
-  };
-
-  Headers.prototype['delete'] = function(name) {
-    delete this.map[normalizeName(name)];
-  };
-
-  Headers.prototype.get = function(name) {
-    name = normalizeName(name);
-    return this.has(name) ? this.map[name] : null
-  };
-
-  Headers.prototype.has = function(name) {
-    return this.map.hasOwnProperty(normalizeName(name))
-  };
-
-  Headers.prototype.set = function(name, value) {
-    this.map[normalizeName(name)] = normalizeValue(value);
-  };
-
-  Headers.prototype.forEach = function(callback, thisArg) {
-    var this$1 = this;
-
-    for (var name in this.map) {
-      if (this$1.map.hasOwnProperty(name)) {
-        callback.call(thisArg, this$1.map[name], name, this$1);
-      }
-    }
-  };
-
-  Headers.prototype.keys = function() {
-    var items = [];
-    this.forEach(function(value, name) { items.push(name); });
-    return iteratorFor(items)
-  };
-
-  Headers.prototype.values = function() {
-    var items = [];
-    this.forEach(function(value) { items.push(value); });
-    return iteratorFor(items)
-  };
-
-  Headers.prototype.entries = function() {
-    var items = [];
-    this.forEach(function(value, name) { items.push([name, value]); });
-    return iteratorFor(items)
   };
 
   if (support.iterable) {
-    Headers.prototype[Symbol.iterator] = Headers.prototype.entries;
-  }
-
-  function consumed(body) {
-    if (body.bodyUsed) {
-      return Promise.reject(new TypeError('Already read'))
-    }
-    body.bodyUsed = true;
-  }
-
-  function fileReaderReady(reader) {
-    return new Promise(function(resolve, reject) {
-      reader.onload = function() {
-        resolve(reader.result);
-      };
-      reader.onerror = function() {
-        reject(reader.error);
-      };
-    })
-  }
-
-  function readBlobAsArrayBuffer(blob) {
-    var reader = new FileReader();
-    var promise = fileReaderReady(reader);
-    reader.readAsArrayBuffer(blob);
-    return promise
-  }
-
-  function readBlobAsText(blob) {
-    var reader = new FileReader();
-    var promise = fileReaderReady(reader);
-    reader.readAsText(blob);
-    return promise
-  }
-
-  function readArrayBufferAsText(buf) {
-    var view = new Uint8Array(buf);
-    var chars = new Array(view.length);
-
-    for (var i = 0; i < view.length; i++) {
-      chars[i] = String.fromCharCode(view[i]);
-    }
-    return chars.join('')
-  }
-
-  function bufferClone(buf) {
-    if (buf.slice) {
-      return buf.slice(0)
-    } else {
-      var view = new Uint8Array(buf.byteLength);
-      view.set(new Uint8Array(buf));
-      return view.buffer
-    }
-  }
-
-  function Body() {
-    this.bodyUsed = false;
-
-    this._initBody = function(body) {
-      this._bodyInit = body;
-      if (!body) {
-        this._bodyText = '';
-      } else if (typeof body === 'string') {
-        this._bodyText = body;
-      } else if (support.blob && Blob.prototype.isPrototypeOf(body)) {
-        this._bodyBlob = body;
-      } else if (support.formData && FormData.prototype.isPrototypeOf(body)) {
-        this._bodyFormData = body;
-      } else if (support.searchParams && URLSearchParams.prototype.isPrototypeOf(body)) {
-        this._bodyText = body.toString();
-      } else if (support.arrayBuffer && support.blob && isDataView(body)) {
-        this._bodyArrayBuffer = bufferClone(body.buffer);
-        // IE 10-11 can't handle a DataView body.
-        this._bodyInit = new Blob([this._bodyArrayBuffer]);
-      } else if (support.arrayBuffer && (ArrayBuffer.prototype.isPrototypeOf(body) || isArrayBufferView(body))) {
-        this._bodyArrayBuffer = bufferClone(body);
-      } else {
-        throw new Error('unsupported BodyInit type')
-      }
-
-      if (!this.headers.get('content-type')) {
-        if (typeof body === 'string') {
-          this.headers.set('content-type', 'text/plain;charset=UTF-8');
-        } else if (this._bodyBlob && this._bodyBlob.type) {
-          this.headers.set('content-type', this._bodyBlob.type);
-        } else if (support.searchParams && URLSearchParams.prototype.isPrototypeOf(body)) {
-          this.headers.set('content-type', 'application/x-www-form-urlencoded;charset=UTF-8');
-        }
-      }
+    iterator[Symbol.iterator] = function() {
+      return iterator
     };
+  }
 
-    if (support.blob) {
-      this.blob = function() {
-        var rejected = consumed(this);
-        if (rejected) {
-          return rejected
-        }
+  return iterator
+}
 
-        if (this._bodyBlob) {
-          return Promise.resolve(this._bodyBlob)
-        } else if (this._bodyArrayBuffer) {
-          return Promise.resolve(new Blob([this._bodyArrayBuffer]))
-        } else if (this._bodyFormData) {
-          throw new Error('could not read FormData body as blob')
-        } else {
-          return Promise.resolve(new Blob([this._bodyText]))
-        }
-      };
+function Headers(headers) {
+  this.map = {};
 
-      this.arrayBuffer = function() {
-        if (this._bodyArrayBuffer) {
-          return consumed(this) || Promise.resolve(this._bodyArrayBuffer)
-        } else {
-          return this.blob().then(readBlobAsArrayBuffer)
-        }
-      };
+  if (headers instanceof Headers) {
+    headers.forEach(function(value, name) {
+      this.append(name, value);
+    }, this);
+  } else if (Array.isArray(headers)) {
+    headers.forEach(function(header) {
+      this.append(header[0], header[1]);
+    }, this);
+  } else if (headers) {
+    Object.getOwnPropertyNames(headers).forEach(function(name) {
+      this.append(name, headers[name]);
+    }, this);
+  }
+}
+
+Headers.prototype.append = function(name, value) {
+  name = normalizeName(name);
+  value = normalizeValue(value);
+  var oldValue = this.map[name];
+  this.map[name] = oldValue ? oldValue + ', ' + value : value;
+};
+
+Headers.prototype['delete'] = function(name) {
+  delete this.map[normalizeName(name)];
+};
+
+Headers.prototype.get = function(name) {
+  name = normalizeName(name);
+  return this.has(name) ? this.map[name] : null
+};
+
+Headers.prototype.has = function(name) {
+  return this.map.hasOwnProperty(normalizeName(name))
+};
+
+Headers.prototype.set = function(name, value) {
+  this.map[normalizeName(name)] = normalizeValue(value);
+};
+
+Headers.prototype.forEach = function(callback, thisArg) {
+  var this$1 = this;
+
+  for (var name in this.map) {
+    if (this$1.map.hasOwnProperty(name)) {
+      callback.call(thisArg, this$1.map[name], name, this$1);
+    }
+  }
+};
+
+Headers.prototype.keys = function() {
+  var items = [];
+  this.forEach(function(value, name) {
+    items.push(name);
+  });
+  return iteratorFor(items)
+};
+
+Headers.prototype.values = function() {
+  var items = [];
+  this.forEach(function(value) {
+    items.push(value);
+  });
+  return iteratorFor(items)
+};
+
+Headers.prototype.entries = function() {
+  var items = [];
+  this.forEach(function(value, name) {
+    items.push([name, value]);
+  });
+  return iteratorFor(items)
+};
+
+if (support.iterable) {
+  Headers.prototype[Symbol.iterator] = Headers.prototype.entries;
+}
+
+function consumed(body) {
+  if (body.bodyUsed) {
+    return Promise.reject(new TypeError('Already read'))
+  }
+  body.bodyUsed = true;
+}
+
+function fileReaderReady(reader) {
+  return new Promise(function(resolve, reject) {
+    reader.onload = function() {
+      resolve(reader.result);
+    };
+    reader.onerror = function() {
+      reject(reader.error);
+    };
+  })
+}
+
+function readBlobAsArrayBuffer(blob) {
+  var reader = new FileReader();
+  var promise = fileReaderReady(reader);
+  reader.readAsArrayBuffer(blob);
+  return promise
+}
+
+function readBlobAsText(blob) {
+  var reader = new FileReader();
+  var promise = fileReaderReady(reader);
+  reader.readAsText(blob);
+  return promise
+}
+
+function readArrayBufferAsText(buf) {
+  var view = new Uint8Array(buf);
+  var chars = new Array(view.length);
+
+  for (var i = 0; i < view.length; i++) {
+    chars[i] = String.fromCharCode(view[i]);
+  }
+  return chars.join('')
+}
+
+function bufferClone(buf) {
+  if (buf.slice) {
+    return buf.slice(0)
+  } else {
+    var view = new Uint8Array(buf.byteLength);
+    view.set(new Uint8Array(buf));
+    return view.buffer
+  }
+}
+
+function Body() {
+  this.bodyUsed = false;
+
+  this._initBody = function(body) {
+    this._bodyInit = body;
+    if (!body) {
+      this._bodyText = '';
+    } else if (typeof body === 'string') {
+      this._bodyText = body;
+    } else if (support.blob && Blob.prototype.isPrototypeOf(body)) {
+      this._bodyBlob = body;
+    } else if (support.formData && FormData.prototype.isPrototypeOf(body)) {
+      this._bodyFormData = body;
+    } else if (support.searchParams && URLSearchParams.prototype.isPrototypeOf(body)) {
+      this._bodyText = body.toString();
+    } else if (support.arrayBuffer && support.blob && isDataView(body)) {
+      this._bodyArrayBuffer = bufferClone(body.buffer);
+      // IE 10-11 can't handle a DataView body.
+      this._bodyInit = new Blob([this._bodyArrayBuffer]);
+    } else if (support.arrayBuffer && (ArrayBuffer.prototype.isPrototypeOf(body) || isArrayBufferView(body))) {
+      this._bodyArrayBuffer = bufferClone(body);
+    } else {
+      this._bodyText = body = Object.prototype.toString.call(body);
     }
 
-    this.text = function() {
+    if (!this.headers.get('content-type')) {
+      if (typeof body === 'string') {
+        this.headers.set('content-type', 'text/plain;charset=UTF-8');
+      } else if (this._bodyBlob && this._bodyBlob.type) {
+        this.headers.set('content-type', this._bodyBlob.type);
+      } else if (support.searchParams && URLSearchParams.prototype.isPrototypeOf(body)) {
+        this.headers.set('content-type', 'application/x-www-form-urlencoded;charset=UTF-8');
+      }
+    }
+  };
+
+  if (support.blob) {
+    this.blob = function() {
       var rejected = consumed(this);
       if (rejected) {
         return rejected
       }
 
       if (this._bodyBlob) {
-        return readBlobAsText(this._bodyBlob)
+        return Promise.resolve(this._bodyBlob)
       } else if (this._bodyArrayBuffer) {
-        return Promise.resolve(readArrayBufferAsText(this._bodyArrayBuffer))
+        return Promise.resolve(new Blob([this._bodyArrayBuffer]))
       } else if (this._bodyFormData) {
-        throw new Error('could not read FormData body as text')
+        throw new Error('could not read FormData body as blob')
       } else {
-        return Promise.resolve(this._bodyText)
+        return Promise.resolve(new Blob([this._bodyText]))
       }
     };
 
-    if (support.formData) {
-      this.formData = function() {
-        return this.text().then(decode)
-      };
+    this.arrayBuffer = function() {
+      if (this._bodyArrayBuffer) {
+        return consumed(this) || Promise.resolve(this._bodyArrayBuffer)
+      } else {
+        return this.blob().then(readBlobAsArrayBuffer)
+      }
+    };
+  }
+
+  this.text = function() {
+    var rejected = consumed(this);
+    if (rejected) {
+      return rejected
     }
 
-    this.json = function() {
-      return this.text().then(JSON.parse)
-    };
-
-    return this
-  }
-
-  // HTTP methods whose capitalization should be normalized
-  var methods = ['DELETE', 'GET', 'HEAD', 'OPTIONS', 'POST', 'PUT'];
-
-  function normalizeMethod(method) {
-    var upcased = method.toUpperCase();
-    return (methods.indexOf(upcased) > -1) ? upcased : method
-  }
-
-  function Request(input, options) {
-    options = options || {};
-    var body = options.body;
-
-    if (input instanceof Request) {
-      if (input.bodyUsed) {
-        throw new TypeError('Already read')
-      }
-      this.url = input.url;
-      this.credentials = input.credentials;
-      if (!options.headers) {
-        this.headers = new Headers(input.headers);
-      }
-      this.method = input.method;
-      this.mode = input.mode;
-      this.signal = input.signal;
-      if (!body && input._bodyInit != null) {
-        body = input._bodyInit;
-        input.bodyUsed = true;
-      }
+    if (this._bodyBlob) {
+      return readBlobAsText(this._bodyBlob)
+    } else if (this._bodyArrayBuffer) {
+      return Promise.resolve(readArrayBufferAsText(this._bodyArrayBuffer))
+    } else if (this._bodyFormData) {
+      throw new Error('could not read FormData body as text')
     } else {
-      this.url = String(input);
+      return Promise.resolve(this._bodyText)
     }
-
-    this.credentials = options.credentials || this.credentials || 'omit';
-    if (options.headers || !this.headers) {
-      this.headers = new Headers(options.headers);
-    }
-    this.method = normalizeMethod(options.method || this.method || 'GET');
-    this.mode = options.mode || this.mode || null;
-    this.signal = options.signal || this.signal;
-    this.referrer = null;
-
-    if ((this.method === 'GET' || this.method === 'HEAD') && body) {
-      throw new TypeError('Body not allowed for GET or HEAD requests')
-    }
-    this._initBody(body);
-  }
-
-  Request.prototype.clone = function() {
-    return new Request(this, { body: this._bodyInit })
   };
 
-  function decode(body) {
-    var form = new FormData();
-    body.trim().split('&').forEach(function(bytes) {
+  if (support.formData) {
+    this.formData = function() {
+      return this.text().then(decode)
+    };
+  }
+
+  this.json = function() {
+    return this.text().then(JSON.parse)
+  };
+
+  return this
+}
+
+// HTTP methods whose capitalization should be normalized
+var methods = ['DELETE', 'GET', 'HEAD', 'OPTIONS', 'POST', 'PUT'];
+
+function normalizeMethod(method) {
+  var upcased = method.toUpperCase();
+  return methods.indexOf(upcased) > -1 ? upcased : method
+}
+
+function Request$1(input, options) {
+  options = options || {};
+  var body = options.body;
+
+  if (input instanceof Request$1) {
+    if (input.bodyUsed) {
+      throw new TypeError('Already read')
+    }
+    this.url = input.url;
+    this.credentials = input.credentials;
+    if (!options.headers) {
+      this.headers = new Headers(input.headers);
+    }
+    this.method = input.method;
+    this.mode = input.mode;
+    this.signal = input.signal;
+    if (!body && input._bodyInit != null) {
+      body = input._bodyInit;
+      input.bodyUsed = true;
+    }
+  } else {
+    this.url = String(input);
+  }
+
+  this.credentials = options.credentials || this.credentials || 'same-origin';
+  if (options.headers || !this.headers) {
+    this.headers = new Headers(options.headers);
+  }
+  this.method = normalizeMethod(options.method || this.method || 'GET');
+  this.mode = options.mode || this.mode || null;
+  this.signal = options.signal || this.signal;
+  this.referrer = null;
+
+  if ((this.method === 'GET' || this.method === 'HEAD') && body) {
+    throw new TypeError('Body not allowed for GET or HEAD requests')
+  }
+  this._initBody(body);
+}
+
+Request$1.prototype.clone = function() {
+  return new Request$1(this, {body: this._bodyInit})
+};
+
+function decode(body) {
+  var form = new FormData();
+  body
+    .trim()
+    .split('&')
+    .forEach(function(bytes) {
       if (bytes) {
         var split = bytes.split('=');
         var name = split.shift().replace(/\+/g, ' ');
@@ -2092,165 +2297,158 @@ var fetch$1 = createCommonjsModule(function (module) {
         form.append(decodeURIComponent(name), decodeURIComponent(value));
       }
     });
-    return form
+  return form
+}
+
+function parseHeaders(rawHeaders) {
+  var headers = new Headers();
+  // Replace instances of \r\n and \n followed by at least one space or horizontal tab with a space
+  // https://tools.ietf.org/html/rfc7230#section-3.2
+  var preProcessedHeaders = rawHeaders.replace(/\r?\n[\t ]+/g, ' ');
+  preProcessedHeaders.split(/\r?\n/).forEach(function(line) {
+    var parts = line.split(':');
+    var key = parts.shift().trim();
+    if (key) {
+      var value = parts.join(':').trim();
+      headers.append(key, value);
+    }
+  });
+  return headers
+}
+
+Body.call(Request$1.prototype);
+
+function Response(bodyInit, options) {
+  if (!options) {
+    options = {};
   }
 
-  function parseHeaders(rawHeaders) {
-    var headers = new Headers();
-    // Replace instances of \r\n and \n followed by at least one space or horizontal tab with a space
-    // https://tools.ietf.org/html/rfc7230#section-3.2
-    var preProcessedHeaders = rawHeaders.replace(/\r?\n[\t ]+/g, ' ');
-    preProcessedHeaders.split(/\r?\n/).forEach(function(line) {
-      var parts = line.split(':');
-      var key = parts.shift().trim();
-      if (key) {
-        var value = parts.join(':').trim();
-        headers.append(key, value);
-      }
-    });
-    return headers
+  this.type = 'default';
+  this.status = options.status === undefined ? 200 : options.status;
+  this.ok = this.status >= 200 && this.status < 300;
+  this.statusText = 'statusText' in options ? options.statusText : 'OK';
+  this.headers = new Headers(options.headers);
+  this.url = options.url || '';
+  this._initBody(bodyInit);
+}
+
+Body.call(Response.prototype);
+
+Response.prototype.clone = function() {
+  return new Response(this._bodyInit, {
+    status: this.status,
+    statusText: this.statusText,
+    headers: new Headers(this.headers),
+    url: this.url
+  })
+};
+
+Response.error = function() {
+  var response = new Response(null, {status: 0, statusText: ''});
+  response.type = 'error';
+  return response
+};
+
+var redirectStatuses = [301, 302, 303, 307, 308];
+
+Response.redirect = function(url, status) {
+  if (redirectStatuses.indexOf(status) === -1) {
+    throw new RangeError('Invalid status code')
   }
 
-  Body.call(Request.prototype);
+  return new Response(null, {status: status, headers: {location: url}})
+};
 
-  function Response(bodyInit, options) {
-    if (!options) {
-      options = {};
+var DOMException$1 = self.DOMException;
+try {
+  new DOMException$1();
+} catch (err) {
+  DOMException$1 = function(message, name) {
+    this.message = message;
+    this.name = name;
+    var error = Error(message);
+    this.stack = error.stack;
+  };
+  DOMException$1.prototype = Object.create(Error.prototype);
+  DOMException$1.prototype.constructor = DOMException$1;
+}
+
+function fetch$1(input, init) {
+  return new Promise(function(resolve, reject) {
+    var request = new Request$1(input, init);
+
+    if (request.signal && request.signal.aborted) {
+      return reject(new DOMException$1('Aborted', 'AbortError'))
     }
 
-    this.type = 'default';
-    this.status = options.status === undefined ? 200 : options.status;
-    this.ok = this.status >= 200 && this.status < 300;
-    this.statusText = 'statusText' in options ? options.statusText : 'OK';
-    this.headers = new Headers(options.headers);
-    this.url = options.url || '';
-    this._initBody(bodyInit);
-  }
+    var xhr = new XMLHttpRequest();
 
-  Body.call(Response.prototype);
-
-  Response.prototype.clone = function() {
-    return new Response(this._bodyInit, {
-      status: this.status,
-      statusText: this.statusText,
-      headers: new Headers(this.headers),
-      url: this.url
-    })
-  };
-
-  Response.error = function() {
-    var response = new Response(null, {status: 0, statusText: ''});
-    response.type = 'error';
-    return response
-  };
-
-  var redirectStatuses = [301, 302, 303, 307, 308];
-
-  Response.redirect = function(url, status) {
-    if (redirectStatuses.indexOf(status) === -1) {
-      throw new RangeError('Invalid status code')
+    function abortXhr() {
+      xhr.abort();
     }
 
-    return new Response(null, {status: status, headers: {location: url}})
-  };
-
-  var DOMException = self.DOMException;
-  try {
-    new DOMException();
-  } catch(err) {
-    DOMException = function(message, name) {
-      this.message = message;
-      this.name = name;
-      var error = Error(message);
-      this.stack = error.stack;
+    xhr.onload = function() {
+      var options = {
+        status: xhr.status,
+        statusText: xhr.statusText,
+        headers: parseHeaders(xhr.getAllResponseHeaders() || '')
+      };
+      options.url = 'responseURL' in xhr ? xhr.responseURL : options.headers.get('X-Request-URL');
+      var body = 'response' in xhr ? xhr.response : xhr.responseText;
+      resolve(new Response(body, options));
     };
-    DOMException.prototype = Object.create(Error.prototype);
-    DOMException.prototype.constructor = DOMException;
-  }
 
-  exports.Headers = Headers;
-  exports.Request = Request;
-  exports.Response = Response;
+    xhr.onerror = function() {
+      reject(new TypeError('Network request failed'));
+    };
 
-  exports.fetch = function(input, init) {
-    return new Promise(function(resolve, reject) {
-      var request = new Request(input, init);
+    xhr.ontimeout = function() {
+      reject(new TypeError('Network request failed'));
+    };
 
-      if (request.signal && request.signal.aborted) {
-        return reject(new DOMException('Aborted', 'AbortError'))
-      }
+    xhr.onabort = function() {
+      reject(new DOMException$1('Aborted', 'AbortError'));
+    };
 
-      var xhr = new XMLHttpRequest();
+    xhr.open(request.method, request.url, true);
 
-      function abortXhr() {
-        xhr.abort();
-      }
+    if (request.credentials === 'include') {
+      xhr.withCredentials = true;
+    } else if (request.credentials === 'omit') {
+      xhr.withCredentials = false;
+    }
 
-      xhr.onload = function() {
-        var options = {
-          status: xhr.status,
-          statusText: xhr.statusText,
-          headers: parseHeaders(xhr.getAllResponseHeaders() || '')
-        };
-        options.url = 'responseURL' in xhr ? xhr.responseURL : options.headers.get('X-Request-URL');
-        var body = 'response' in xhr ? xhr.response : xhr.responseText;
-        resolve(new Response(body, options));
+    if ('responseType' in xhr && support.blob) {
+      xhr.responseType = 'blob';
+    }
+
+    request.headers.forEach(function(value, name) {
+      xhr.setRequestHeader(name, value);
+    });
+
+    if (request.signal) {
+      request.signal.addEventListener('abort', abortXhr);
+
+      xhr.onreadystatechange = function() {
+        // DONE (success or failure)
+        if (xhr.readyState === 4) {
+          request.signal.removeEventListener('abort', abortXhr);
+        }
       };
+    }
 
-      xhr.onerror = function() {
-        reject(new TypeError('Network request failed'));
-      };
+    xhr.send(typeof request._bodyInit === 'undefined' ? null : request._bodyInit);
+  })
+}
 
-      xhr.ontimeout = function() {
-        reject(new TypeError('Network request failed'));
-      };
+fetch$1.polyfill = true;
 
-      xhr.onabort = function() {
-        reject(new DOMException('Aborted', 'AbortError'));
-      };
-
-      xhr.open(request.method, request.url, true);
-
-      if (request.credentials === 'include') {
-        xhr.withCredentials = true;
-      } else if (request.credentials === 'omit') {
-        xhr.withCredentials = false;
-      }
-
-      if ('responseType' in xhr && support.blob) {
-        xhr.responseType = 'blob';
-      }
-
-      request.headers.forEach(function(value, name) {
-        xhr.setRequestHeader(name, value);
-      });
-
-      if (request.signal) {
-        request.signal.addEventListener('abort', abortXhr);
-
-        xhr.onreadystatechange = function() {
-          // DONE (success or failure)
-          if (xhr.readyState === 4) {
-            request.signal.removeEventListener('abort', abortXhr);
-          }
-        };
-      }
-
-      xhr.send(typeof request._bodyInit === 'undefined' ? null : request._bodyInit);
-    })
-  };
-  exports.fetch.polyfill = true;
-
-  if (!self.fetch) {
-    self.fetch = exports.fetch;
-    self.Headers = Headers;
-    self.Request = Request;
-    self.Response = Response;
-  }
-
-  return exports
-});
-});
+if (!self.fetch) {
+  self.fetch = fetch$1;
+  self.Headers = Headers;
+  self.Request = Request$1;
+  self.Response = Response;
+}
 
 var _get = function get(object, property, receiver) { if (object === null) { object = Function.prototype; } var desc = Object.getOwnPropertyDescriptor(object, property); if (desc === undefined) { var parent = Object.getPrototypeOf(object); if (parent === null) { return undefined; } else { return get(parent, property, receiver); } } else if ("value" in desc) { return desc.value; } else { var getter = desc.get; if (getter === undefined) { return undefined; } return getter.call(receiver); } };
 
@@ -2567,7 +2765,7 @@ L.VectorGrid.Protobuf = L.VectorGrid.extend({
 			return true;
 		}
 
-		var zoom = this._map._animateToZoom || this._map._zoom;
+		var zoom = this._map._animatingZoom ? this._map._animateToZoom : this._map._zoom;
 		var currentZoom = zoom === coords.z;
 
 		var tileBounds = this._tileCoordsToBounds(coords);

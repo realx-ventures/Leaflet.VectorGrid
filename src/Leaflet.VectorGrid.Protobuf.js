@@ -1,8 +1,8 @@
 
 import Pbf from 'pbf';
 import {VectorTile} from '@mapbox/vector-tile';
-import fetch from '@geoblink/whatwg-fetch'
-import {} from 'abortcontroller-polyfill'
+import {fetch} from 'whatwg-fetch';
+import {} from 'abortcontroller-polyfill';
 /*
  * 🍂class VectorGrid.Protobuf
  * 🍂extends VectorGrid
