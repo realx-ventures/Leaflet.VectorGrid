@@ -2807,7 +2807,7 @@ L.VectorGrid.Protobuf = L.VectorGrid.extend({
 		var tileUrl = L.Util.template(this._url, L.extend(data, this.options));
 
 		var controller = this._abortController;
-		return fetch$1.fetch(tileUrl, Object.assign({signal: controller.signal}, this.options.fetchOptions)).then(function(response){
+		return fetch$1(tileUrl, Object.assign({signal: controller.signal}, this.options.fetchOptions)).then(function(response){
 
 			if (!response.ok || !this._isCurrentTile(coords)) {
 				return {layers:[]};
