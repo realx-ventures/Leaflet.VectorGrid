@@ -3013,7 +3013,7 @@ L.Canvas.Tile = L.Canvas.extend({
 
 		for (var id in this._layers) {			
 			layer = this._layers[id];
-			console.log(layer);
+			//console.log(layer);
 			if (layer.options.interactive && layer._containsPoint(point) && !this._map._draggableMoved(layer)) {
 				L.DomEvent.fakeStop(e);
 				clickedLayers.push(layer);
