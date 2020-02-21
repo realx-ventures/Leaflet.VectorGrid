@@ -285,11 +285,13 @@ var FillSymbolizer = L.Polygon.extend({
 	includes: [Symbolizer.prototype, PolyBase],
 
 	initialize: function(feature, pxPerExtent) {
+		//console.log(feature);
 		this.properties = feature.properties;
 		this._makeFeatureParts(feature, pxPerExtent);
 	},
 
 	render: function(renderer, style) {
+		//console.log(style)
 		Symbolizer.prototype.render.call(this, renderer, style);
 		this._updatePath();
 	}
@@ -3009,10 +3011,11 @@ L.Canvas.Tile = L.Canvas.extend({
 	_onClick: function (e) {
 		var point = this._map.mouseEventToLayerPoint(e).subtract(this.getOffset()), clickedLayers = [], layer;
 
-		for (var id in this._layers) {
+		for (var id in this._layers) {			
 			layer = this._layers[id];
+			console.log(layer);
 			if (layer.options.interactive && layer._containsPoint(point) && !this._map._draggableMoved(layer)) {
-				L.DomEvent._fakeStop(e);
+				L.DomEvent.fakeStop(e);
 				clickedLayers.push(layer);
 			}
 		}
