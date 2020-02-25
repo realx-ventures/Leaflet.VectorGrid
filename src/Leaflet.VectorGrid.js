@@ -210,7 +210,7 @@ L.VectorGrid = L.GridLayer.extend({
 					var feature = features[i];
 
                     var styleOptions = this.options.vectorTileLayerStyles[feature.layerName] ||
-                        L.Path.prototype.options;
+												L.Path.prototype.options;
                     this._updateStyles(feature.feature, tile, styleOptions);
                 }
 			}
@@ -241,6 +241,7 @@ L.VectorGrid = L.GridLayer.extend({
 		if (!(styleOptions instanceof Array)) {
 			styleOptions = [styleOptions];
 		}
+		
 
 		for (var j = 0; j < styleOptions.length; j++) {
 			var style = L.extend({}, L.Path.prototype.options, styleOptions[j]);

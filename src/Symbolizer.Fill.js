@@ -9,13 +9,11 @@ export var FillSymbolizer = L.Polygon.extend({
 	includes: [Symbolizer.prototype, PolyBase],
 
 	initialize: function(feature, pxPerExtent) {
-		//console.log(feature);
 		this.properties = feature.properties;
 		this._makeFeatureParts(feature, pxPerExtent);
 	},
 
 	render: function(renderer, style) {
-		//console.log(style)
 		Symbolizer.prototype.render.call(this, renderer, style);
 		this._updatePath();
 	}

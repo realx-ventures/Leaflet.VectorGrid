@@ -1658,14 +1658,12 @@ var LineSymbolizer = L.Polyline.extend({
 var FillSymbolizer = L.Polygon.extend({
 	includes: [Symbolizer.prototype, PolyBase],
 
-	initialize: function(feature, pxPerExtent) {
-		//console.log(feature);
+	initialize: function(feature, pxPerExtent, layerStyle) {
 		this.properties = feature.properties;
 		this._makeFeatureParts(feature, pxPerExtent);
 	},
 
 	render: function(renderer, style) {
-		//console.log(style)
 		Symbolizer.prototype.render.call(this, renderer, style);
 		this._updatePath();
 	}
@@ -1780,7 +1778,7 @@ L.VectorGrid = L.GridLayer.extend({
 						}
 	
 						if (styleOptions instanceof Function) {
-							styleOptions = styleOptions(feat.properties, coords.z);
+							styleOptions = styleOptions(feat.properties, coords.z, 3, renderer._ctx);
 						}
 	
 						if (!(styleOptions instanceof Array)) {
@@ -1878,7 +1876,7 @@ L.VectorGrid = L.GridLayer.extend({
 					var feature = features[i];
 
                     var styleOptions = this.options.vectorTileLayerStyles[feature.layerName] ||
-                        L.Path.prototype.options;
+												L.Path.prototype.options;
                     this._updateStyles(feature.feature, tile, styleOptions);
                 }
 			}
@@ -1903,12 +1901,13 @@ L.VectorGrid = L.GridLayer.extend({
 
 	_updateStyles: function(feat, renderer, styleOptions) {
 		styleOptions = (styleOptions instanceof Function) ?
-			styleOptions(feat.properties, renderer.getCoord().z) :
+			styleOptions(feat.properties, renderer.getCoord().z, 3, renderer._ctx) :
 			styleOptions;
 
 		if (!(styleOptions instanceof Array)) {
 			styleOptions = [styleOptions];
 		}
+		
 
 		for (var j = 0; j < styleOptions.length; j++) {
 			var style = L.extend({}, L.Path.prototype.options, styleOptions[j]);
@@ -1928,7 +1927,7 @@ L.VectorGrid = L.GridLayer.extend({
 			layer = new LineSymbolizer(feat, pxPerExtent);
 			break;
 		case 3:
-			layer = new FillSymbolizer(feat, pxPerExtent);
+			layer = new FillSymbolizer(feat, pxPerExtent, layerStyle);
 			break;
 		}
 
@@ -2769,7 +2768,7 @@ L.VectorGrid.Protobuf = L.VectorGrid.extend({
 		}
 
 		var zoom = this._map._animatingZoom ? this._map._animateToZoom : this._map._zoom;
-		var currentZoom = zoom === coords.z;
+		var currentZoom = Math.round(zoom) === coords.z;
 
 		var tileBounds = this._tileCoordsToBounds(coords);
 		var currentBounds = this._map.getBounds().overlaps(tileBounds); 
@@ -2778,7 +2777,7 @@ L.VectorGrid.Protobuf = L.VectorGrid.extend({
 
 	},
 	_setView: function (center, zoom, noPrune, noUpdate) {
-		if (zoom !== this._tileZoom) {
+		if (Math.round(zoom) !== this._tileZoom) {
 			this._tileZoom = zoom;
 			this._abortController.abort();
 			this._abortController = new AbortController();
@@ -3014,7 +3013,6 @@ L.Canvas.Tile = L.Canvas.extend({
 
 		for (var id in this._layers) {			
 			layer = this._layers[id];
-			//console.log(layer);
 			if (layer.options.interactive && layer._containsPoint(point) && !this._map._draggableMoved(layer)) {
 				L.DomEvent.fakeStop(e);
 				clickedLayers.push(layer);

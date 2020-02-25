@@ -96,7 +96,7 @@ L.VectorGrid.Protobuf = L.VectorGrid.extend({
 		}
 
 		var zoom = this._map._animatingZoom ? this._map._animateToZoom : this._map._zoom;
-		var currentZoom = zoom === coords.z;
+		var currentZoom = Math.round(zoom) === coords.z;
 
 		var tileBounds = this._tileCoordsToBounds(coords);
 		var currentBounds = this._map.getBounds().overlaps(tileBounds); 
@@ -105,7 +105,7 @@ L.VectorGrid.Protobuf = L.VectorGrid.extend({
 
 	},
 	_setView: function (center, zoom, noPrune, noUpdate) {
-		if (zoom !== this._tileZoom) {
+		if (Math.round(zoom) !== this._tileZoom) {
 			this._tileZoom = zoom
 			this._abortController.abort()
 			this._abortController = new AbortController()
