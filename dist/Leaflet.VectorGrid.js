@@ -284,7 +284,7 @@ var LineSymbolizer = L.Polyline.extend({
 var FillSymbolizer = L.Polygon.extend({
 	includes: [Symbolizer.prototype, PolyBase],
 
-	initialize: function(feature, pxPerExtent, layerStyle) {
+	initialize: function(feature, pxPerExtent) {
 		this.properties = feature.properties;
 		this._makeFeatureParts(feature, pxPerExtent);
 	},
@@ -404,7 +404,7 @@ L.VectorGrid = L.GridLayer.extend({
 						}
 	
 						if (styleOptions instanceof Function) {
-							styleOptions = styleOptions(feat.properties, coords.z, 3, renderer._ctx);
+							styleOptions = styleOptions(feat.properties, coords.z);
 						}
 	
 						if (!(styleOptions instanceof Array)) {
@@ -527,7 +527,7 @@ L.VectorGrid = L.GridLayer.extend({
 
 	_updateStyles: function(feat, renderer, styleOptions) {
 		styleOptions = (styleOptions instanceof Function) ?
-			styleOptions(feat.properties, renderer.getCoord().z, 3, renderer._ctx) :
+			styleOptions(feat.properties, renderer.getCoord().z) :
 			styleOptions;
 
 		if (!(styleOptions instanceof Array)) {
@@ -553,7 +553,7 @@ L.VectorGrid = L.GridLayer.extend({
 			layer = new LineSymbolizer(feat, pxPerExtent);
 			break;
 		case 3:
-			layer = new FillSymbolizer(feat, pxPerExtent, layerStyle);
+			layer = new FillSymbolizer(feat, pxPerExtent);
 			break;
 		}
 
