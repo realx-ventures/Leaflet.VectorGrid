@@ -359,9 +359,7 @@ L.VectorGrid = L.GridLayer.extend({
 		var tileSize = this.getTileSize();
 		var renderer = this.options.rendererFactory(coords, tileSize, this.options);
 
-		var tileBounds = this._tileCoordsToBounds(coords);	
-
-		var vectorTilePromise = this._getVectorTilePromise(coords, tileBounds);
+		var vectorTilePromise = this._getVectorTilePromise(coords);
 
 		if (storeFeatures) {
 			this._vectorTiles[this._tileCoordsToKey(coords)] = renderer;
@@ -375,16 +373,16 @@ L.VectorGrid = L.GridLayer.extend({
 				for (var layerName in vectorTile.layers) {
 					this._dataLayerNames[layerName] = true;
 					var layer = vectorTile.layers[layerName];
-	
+
 					var pxPerExtent = this.getTileSize().divideBy(layer.extent);
-	
+
 					var layerStyle = this.options.vectorTileLayerStyles[ layerName ] ||
 					L.Path.prototype.options;
-	
+
 					for (var i = 0; i < layer.features.length; i++) {
 						var feat = layer.features[i];
 						var id;
-	
+
 						if (this.options.filter instanceof Function &&
 							!this.options.filter(feat.properties, coords.z)) {
 							continue;
@@ -402,31 +400,31 @@ L.VectorGrid = L.GridLayer.extend({
 								}
 							}
 						}
-	
+
 						if (styleOptions instanceof Function) {
 							styleOptions = styleOptions(feat.properties, coords.z);
 						}
-	
+
 						if (!(styleOptions instanceof Array)) {
 							styleOptions = [styleOptions];
 						}
-	
+
 						if (!styleOptions.length) {
 							continue;
 						}
-	
+
 						var featureLayer = this._createLayer(feat, pxPerExtent);
-	
+
 						for (var j = 0; j < styleOptions.length; j++) {
 							var style = L.extend({}, L.Path.prototype.options, styleOptions[j]);
 							featureLayer.render(renderer, style);
 							renderer._addPath(featureLayer);
 						}
-	
+
 						if (this.options.interactive) {
 							featureLayer.makeInteractive();
 						}
-	
+
 						if (storeFeatures) {
 							// multiple features may share the same id, add them
 							// to an array of features
@@ -440,15 +438,15 @@ L.VectorGrid = L.GridLayer.extend({
 							});
 						}
 					}
-	
+
 				}
-	
+
 			}
-		
+
 			if (this._map != null) {
 				renderer.addTo(this._map);
 			}
-	
+
 			L.Util.requestAnimFrame(done.bind(coords, null, null));
 
 		}.bind(this), function (err) {
@@ -2760,20 +2758,21 @@ L.VectorGrid.Protobuf = L.VectorGrid.extend({
 
 	_getSubdomain: L.TileLayer.prototype._getSubdomain,
 
-	_isCurrentTile : function(coords, tileBounds) {
+	_isCurrentTile: function(coords) {
 
 		if (!this._map) {
 			return true;
 		}
 
 		var zoom = this._map._animatingZoom ? this._map._animateToZoom : this._map._zoom;
+		var center = this._map._animatingZoom ? this._map._animateToCenter : this._map.getCenter();
 		var currentZoom = Math.round(zoom) === coords.z;
+		var destinationBounds = this._getViewBounds(center, zoom);
 
 		var tileBounds = this._tileCoordsToBounds(coords);
-		var currentBounds = this._map.getBounds().overlaps(tileBounds); 
+		var currentBounds = destinationBounds.overlaps(tileBounds);
 
 		return currentZoom && currentBounds;
-
 	},
 	_setView: function (center, zoom, noPrune, noUpdate) {
 		if (Math.round(zoom) !== this._tileZoom) {
@@ -2800,7 +2799,7 @@ L.VectorGrid.Protobuf = L.VectorGrid.extend({
 			data['-y'] = invertedY;
 		}
 
-		if (!this._isCurrentTile(coords, tileBounds)) {
+		if (!this._isCurrentTile(coords)) {
 			return Promise.resolve({layers:[]});
 		}
 
@@ -2811,7 +2810,7 @@ L.VectorGrid.Protobuf = L.VectorGrid.extend({
 
 			if (!response.ok || !this._isCurrentTile(coords)) {
 				return {layers:[]};
-			} 
+			}
 
 			return response.blob().then( function (blob) {
 
@@ -2845,7 +2844,18 @@ L.VectorGrid.Protobuf = L.VectorGrid.extend({
 
 			return json;
 		});
-	}
+	},
+
+	_getViewBounds: function (center, zoom) {
+		var projectedCenter = this._map.project(center, zoom);
+		var size = this._map.getSize();
+		var swPoint = L.point(projectedCenter.x - size.x / 2, projectedCenter.y - size.y / 2);
+		var nePoint = L.point(projectedCenter.x + size.x / 2, projectedCenter.y + size.y / 2);
+		var sw = this._map.unproject(swPoint, zoom);
+		var ne = this._map.unproject(nePoint, zoom);
+
+		return L.latLngBounds(sw, ne);
+	},
 });
 
 

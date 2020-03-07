@@ -33,138 +33,7 @@
 		</div>
 	</div>
 
-	<h2 id='vectorgrid-protobuf'>VectorGrid.Protobuf</h2><p>A <a href="#vectorgrid"><code>VectorGrid</code></a> for vector tiles fetched from the internet.
-Tiles are supposed to be protobufs (AKA &quot;protobuffer&quot; or &quot;Protocol Buffers&quot;),
-containing data which complies with the
-<a href="https://github.com/mapbox/vector-tile-spec/tree/master/2.1">MapBox Vector Tile Specification</a>.
-This is the format used by:</p>
-<ul>
-<li>Mapbox Vector Tiles</li>
-<li>Mapzen Vector Tiles</li>
-<li>ESRI Vector Tiles</li>
-<li><a href="https://openmaptiles.com/hosting/">OpenMapTiles hosted Vector Tiles</a></li>
-</ul>
-
-<section>
-<h3 id='vectorgrid-protobuf-example'>Usage example</h3>
-
-<section >
-
-
-
-
-
-<p>You must initialize a <a href="#vectorgrid-protobuf"><code>VectorGrid.Protobuf</code></a> with a URL template, just like in
-<code>L.TileLayer</code>s. The difference is that the template must point to vector tiles
-(usually <code>.pbf</code> or <code>.mvt</code>) instead of raster (<code>.png</code> or <code>.jpg</code>) tiles, and that
-you should define the styling for all the features.
-<br><br>
-For OpenMapTiles, with a key from <a href="https://openmaptiles.org/docs/host/use-cdn/">https://openmaptiles.org/docs/host/use-cdn/</a>,
-initialization looks like this:</p>
-<pre><code>L.vectorGrid.protobuf(&quot;https://free-{s}.tilehosting.com/data/v3/{z}/{x}/{y}.pbf.pict?key={key}&quot;, {
-    vectorTileLayerStyles: { ... },
-    subdomains: &quot;0123&quot;,
-    key: &#39;abcdefghi01234567890&#39;,
-    maxNativeZoom: 14
-}).addTo(map);
-</code></pre><p>And for Mapbox vector tiles, it looks like this:</p>
-<pre><code>L.vectorGrid.protobuf(&quot;https://{s}.tiles.mapbox.com/v4/mapbox.mapbox-streets-v6/{z}/{x}/{y}.vector.pbf?access_token={token}&quot;, {
-    vectorTileLayerStyles: { ... },
-    subdomains: &quot;abcd&quot;,
-    token: &quot;pk.abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRTS.TUVWXTZ0123456789abcde&quot;
-}).addTo(map);
-</code></pre>
-
-
-</section>
-
-
-</section><section>
-<h3 id='vectorgrid-protobuf-factory'>Creation</h3>
-
-<section >
-
-
-
-
-<table><thead>
-	<tr>
-		<th>Factory</th>
-		<th>Description</th>
-	</tr>
-	</thead><tbody>
-	<tr id='vectorgrid-protobuf-l-vectorgrid-protobuf'>
-		<td><code><b>L.vectorGrid.protobuf</b>(<nobr>&lt;String&gt;</nobr> <i>url</i>, <i>options</i>)</nobr></code></td>
-		<td>Instantiates a new protobuf VectorGrid with the given URL template and options</td>
-	</tr>
-</tbody></table>
-
-</section>
-
-
-</section><section>
-<h3 id='vectorgrid-protobuf-option'>Options</h3>
-
-<section >
-
-
-
-<div class='section-comments'>As with <code>L.TileLayer</code>, the URL template might contain a reference to
-any option (see the example above and note the <code>{key}</code> or <code>token</code> in the URL
-template, and the corresponding option).</div>
-
-<table><thead>
-	<tr>
-		<th>Option</th>
-		<th>Type</th>
-		<th>Default</th>
-		<th>Description</th>
-	</tr>
-	</thead><tbody>
-	<tr id='vectorgrid-protobuf-subdomains'>
-		<td><code><b>subdomains</b></code></td>
-		<td><code>String</code>
-		<td><code>&#x27;abc&#x27;</code></td>
-		<td>Akin to the <code>subdomains</code> option for <code>L.TileLayer</code>.</td>
-	</tr>
-	<tr id='vectorgrid-protobuf-fetchoptions'>
-		<td><code><b>fetchOptions</b></code></td>
-		<td><code>Object</code>
-		<td><code>{}</code></td>
-		<td>options passed to <code>fetch</code>, e.g. {credentials: &#39;same-origin&#39;} to send cookie for the current domain</td>
-	</tr>
-</tbody></table>
-
-</section>
-
-
-</section><section>
-<h3 id='vectorgrid-protobuf-method'>Methods</h3>
-
-<section >
-
-
-
-
-<table><thead>
-	<tr>
-		<th>Method</th>
-		<th>Returns</th>
-		<th>Description</th>
-	</tr>
-	</thead><tbody>
-	<tr id='vectorgrid-protobuf-seturl'>
-		<td><code><b>setUrl</b>(<nobr>&lt;String&gt;</nobr> <i>url</i>, <nobr>&lt;Boolean&gt;</nobr> <i>noRedraw?</i>)</nobr></code></td>
-		<td><code>this</code></td>
-		<td><p>Updates the layer&#39;s URL template and redraws it (unless <code>noRedraw</code> is set to <code>true</code>).</p>
-</td>
-	</tr>
-</tbody></table>
-
-</section>
-
-
-</section><h2 id='vectorgrid-slicer'>VectorGrid.Slicer</h2><p>A <a href="#vectorgrid"><code>VectorGrid</code></a> for slicing up big GeoJSON or TopoJSON documents in vector
+	<h2 id='vectorgrid-slicer'>VectorGrid.Slicer</h2><p>A <a href="#vectorgrid"><code>VectorGrid</code></a> for slicing up big GeoJSON or TopoJSON documents in vector
 tiles, leveraging <a href="https://github.com/mapbox/geojson-vt"><code>geojson-vt</code></a>.</p>
 
 <section>
@@ -346,6 +215,137 @@ the vector tiles displayed. Useful for introspection.</p>
 		<td><code>Promise</code></td>
 		<td><p>Given a <code>coords</code> object in the form of <code>{x: Number, y: Number, z: Number}</code>,
 this function must return a <code>Promise</code> for a vector tile.</p>
+</td>
+	</tr>
+</tbody></table>
+
+</section>
+
+
+</section><h2 id='vectorgrid-protobuf'>VectorGrid.Protobuf</h2><p>A <a href="#vectorgrid"><code>VectorGrid</code></a> for vector tiles fetched from the internet.
+Tiles are supposed to be protobufs (AKA &quot;protobuffer&quot; or &quot;Protocol Buffers&quot;),
+containing data which complies with the
+<a href="https://github.com/mapbox/vector-tile-spec/tree/master/2.1">MapBox Vector Tile Specification</a>.
+This is the format used by:</p>
+<ul>
+<li>Mapbox Vector Tiles</li>
+<li>Mapzen Vector Tiles</li>
+<li>ESRI Vector Tiles</li>
+<li><a href="https://openmaptiles.com/hosting/">OpenMapTiles hosted Vector Tiles</a></li>
+</ul>
+
+<section>
+<h3 id='vectorgrid-protobuf-example'>Usage example</h3>
+
+<section >
+
+
+
+
+
+<p>You must initialize a <a href="#vectorgrid-protobuf"><code>VectorGrid.Protobuf</code></a> with a URL template, just like in
+<code>L.TileLayer</code>s. The difference is that the template must point to vector tiles
+(usually <code>.pbf</code> or <code>.mvt</code>) instead of raster (<code>.png</code> or <code>.jpg</code>) tiles, and that
+you should define the styling for all the features.
+<br><br>
+For OpenMapTiles, with a key from <a href="https://openmaptiles.org/docs/host/use-cdn/">https://openmaptiles.org/docs/host/use-cdn/</a>,
+initialization looks like this:</p>
+<pre><code>L.vectorGrid.protobuf(&quot;https://free-{s}.tilehosting.com/data/v3/{z}/{x}/{y}.pbf.pict?key={key}&quot;, {
+    vectorTileLayerStyles: { ... },
+    subdomains: &quot;0123&quot;,
+    key: &#39;abcdefghi01234567890&#39;,
+    maxNativeZoom: 14
+}).addTo(map);
+</code></pre><p>And for Mapbox vector tiles, it looks like this:</p>
+<pre><code>L.vectorGrid.protobuf(&quot;https://{s}.tiles.mapbox.com/v4/mapbox.mapbox-streets-v6/{z}/{x}/{y}.vector.pbf?access_token={token}&quot;, {
+    vectorTileLayerStyles: { ... },
+    subdomains: &quot;abcd&quot;,
+    token: &quot;pk.abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRTS.TUVWXTZ0123456789abcde&quot;
+}).addTo(map);
+</code></pre>
+
+
+</section>
+
+
+</section><section>
+<h3 id='vectorgrid-protobuf-factory'>Creation</h3>
+
+<section >
+
+
+
+
+<table><thead>
+	<tr>
+		<th>Factory</th>
+		<th>Description</th>
+	</tr>
+	</thead><tbody>
+	<tr id='vectorgrid-protobuf-l-vectorgrid-protobuf'>
+		<td><code><b>L.vectorGrid.protobuf</b>(<nobr>&lt;String&gt;</nobr> <i>url</i>, <i>options</i>)</nobr></code></td>
+		<td>Instantiates a new protobuf VectorGrid with the given URL template and options</td>
+	</tr>
+</tbody></table>
+
+</section>
+
+
+</section><section>
+<h3 id='vectorgrid-protobuf-option'>Options</h3>
+
+<section >
+
+
+
+<div class='section-comments'>As with <code>L.TileLayer</code>, the URL template might contain a reference to
+any option (see the example above and note the <code>{key}</code> or <code>token</code> in the URL
+template, and the corresponding option).</div>
+
+<table><thead>
+	<tr>
+		<th>Option</th>
+		<th>Type</th>
+		<th>Default</th>
+		<th>Description</th>
+	</tr>
+	</thead><tbody>
+	<tr id='vectorgrid-protobuf-subdomains'>
+		<td><code><b>subdomains</b></code></td>
+		<td><code>String</code>
+		<td><code>&#x27;abc&#x27;</code></td>
+		<td>Akin to the <code>subdomains</code> option for <code>L.TileLayer</code>.</td>
+	</tr>
+	<tr id='vectorgrid-protobuf-fetchoptions'>
+		<td><code><b>fetchOptions</b></code></td>
+		<td><code>Object</code>
+		<td><code>{}</code></td>
+		<td>options passed to <code>fetch</code>, e.g. {credentials: &#39;same-origin&#39;} to send cookie for the current domain</td>
+	</tr>
+</tbody></table>
+
+</section>
+
+
+</section><section>
+<h3 id='vectorgrid-protobuf-method'>Methods</h3>
+
+<section >
+
+
+
+
+<table><thead>
+	<tr>
+		<th>Method</th>
+		<th>Returns</th>
+		<th>Description</th>
+	</tr>
+	</thead><tbody>
+	<tr id='vectorgrid-protobuf-seturl'>
+		<td><code><b>setUrl</b>(<nobr>&lt;String&gt;</nobr> <i>url</i>, <nobr>&lt;Boolean&gt;</nobr> <i>noRedraw?</i>)</nobr></code></td>
+		<td><code>this</code></td>
+		<td><p>Updates the layer&#39;s URL template and redraws it (unless <code>noRedraw</code> is set to <code>true</code>).</p>
 </td>
 	</tr>
 </tbody></table>
